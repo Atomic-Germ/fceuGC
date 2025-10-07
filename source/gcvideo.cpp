@@ -680,9 +680,11 @@ ResetVideo_Emu ()
 	GX_SetDispCopyDst (rmode->fbWidth, rmode->xfbHeight);
 	u8 sharp[7] = {0,0,21,22,21,0,0};
 	u8 soft[7] = {8,8,10,12,10,8,8};
+	u8 scanline[7] = {0,2,19,22,19,2,0}; // very slight vertical blend for scanlines
 	u8* vfilter =
 		GCSettings.render == 3 ? sharp
 		: GCSettings.render == 4 ? soft
+		: GCSettings.render == 5 ? scanline
 		: rmode->vfilter;
 	GX_SetCopyFilter(rmode->aa, rmode->sample_pattern, (rmode->xfbMode == VI_XFBMODE_SF) ? GX_FALSE : GX_TRUE, vfilter);
 
