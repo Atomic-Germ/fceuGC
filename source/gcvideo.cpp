@@ -757,7 +757,7 @@ void RenderFrame(unsigned char *XBuf)
 		for (width = 0; width < 256 - (borderwidth << 1); width += 4)
 		{
 			// Row one
-			if (GCSettings.render == 5 && (height & 1)) { // scanline mode - darken odd rows
+			if (GCSettings.render == 5 && !(height & 1)) { // scanline mode - darken odd rows
 				u16 p1 = rgb565[*src1++];
 				u16 p2 = rgb565[*src1++];
 				u16 p3 = rgb565[*src1++];
@@ -774,7 +774,7 @@ void RenderFrame(unsigned char *XBuf)
 			}
 
 			// Row two
-			if (GCSettings.render == 5 && ((height + 1) & 1)) { // scanline mode - darken odd rows
+			if (GCSettings.render == 5 && !((height + 1) & 1)) { // scanline mode - darken odd rows
 				u16 p1 = rgb565[*src2++];
 				u16 p2 = rgb565[*src2++];
 				u16 p3 = rgb565[*src2++];
@@ -791,7 +791,7 @@ void RenderFrame(unsigned char *XBuf)
 			}
 
 			// Row three
-			if (GCSettings.render == 5 && ((height + 2) & 1)) { // scanline mode - darken odd rows
+			if (GCSettings.render == 5 && !((height + 2) & 1)) { // scanline mode - darken odd rows
 				u16 p1 = rgb565[*src3++];
 				u16 p2 = rgb565[*src3++];
 				u16 p3 = rgb565[*src3++];
@@ -808,7 +808,7 @@ void RenderFrame(unsigned char *XBuf)
 			}
 
 			// Row four
-			if (GCSettings.render == 5 && ((height + 3) & 1)) { // scanline mode - darken odd rows
+			if (GCSettings.render == 5 && !((height + 3) & 1)) { // scanline mode - darken odd rows
 				u16 p1 = rgb565[*src4++];
 				u16 p2 = rgb565[*src4++];
 				u16 p3 = rgb565[*src4++];
@@ -926,7 +926,7 @@ void RenderStereoFrames(unsigned char *XBufLeft, unsigned char *XBufRight)
 		for (width = 0; width < 256 - (borderwidth << 1); width += 4)
 		{
 			// Row one
-			if (GCSettings.render == 5 && (height & 1)) { // scanline mode - darken odd rows
+			if (GCSettings.render == 5 && !(height & 1)) { // scanline mode - darken odd rows
 				u16 p1 = anaglyph565[(*Lsrc1++) & 63][(*Rsrc1++) & 63];
 				u16 p2 = anaglyph565[(*Lsrc1++) & 63][(*Rsrc1++) & 63];
 				u16 p3 = anaglyph565[(*Lsrc1++) & 63][(*Rsrc1++) & 63];
@@ -942,7 +942,7 @@ void RenderStereoFrames(unsigned char *XBufLeft, unsigned char *XBufRight)
 				*texture++ = anaglyph565[(*Lsrc1++) & 63][(*Rsrc1++) & 63];
 			}
 			// Row two
-			if (GCSettings.render == 5 && ((height + 1) & 1)) { // scanline mode - darken odd rows
+			if (GCSettings.render == 5 && !((height + 1) & 1)) { // scanline mode - darken odd rows
 				u16 p1 = anaglyph565[(*Lsrc2++) & 63][(*Rsrc2++) & 63];
 				u16 p2 = anaglyph565[(*Lsrc2++) & 63][(*Rsrc2++) & 63];
 				u16 p3 = anaglyph565[(*Lsrc2++) & 63][(*Rsrc2++) & 63];
@@ -958,7 +958,7 @@ void RenderStereoFrames(unsigned char *XBufLeft, unsigned char *XBufRight)
 				*texture++ = anaglyph565[(*Lsrc2++) & 63][(*Rsrc2++) & 63];
 			}
 			// Row three
-			if (GCSettings.render == 5 && ((height + 2) & 1)) { // scanline mode - darken odd rows
+			if (GCSettings.render == 5 && !((height + 2) & 1)) { // scanline mode - darken odd rows
 				u16 p1 = anaglyph565[(*Lsrc3++) & 63][(*Rsrc3++) & 63];
 				u16 p2 = anaglyph565[(*Lsrc3++) & 63][(*Rsrc3++) & 63];
 				u16 p3 = anaglyph565[(*Lsrc3++) & 63][(*Rsrc3++) & 63];
@@ -974,7 +974,7 @@ void RenderStereoFrames(unsigned char *XBufLeft, unsigned char *XBufRight)
 				*texture++ = anaglyph565[(*Lsrc3++) & 63][(*Rsrc3++) & 63];
 			}
 			// Row four
-			if (GCSettings.render == 5 && ((height + 3) & 1)) { // scanline mode - darken odd rows
+			if (GCSettings.render == 5 && !((height + 3) & 1)) { // scanline mode - darken odd rows
 				u16 p1 = anaglyph565[(*Lsrc4++) & 63][(*Rsrc4++) & 63];
 				u16 p2 = anaglyph565[(*Lsrc4++) & 63][(*Rsrc4++) & 63];
 				u16 p3 = anaglyph565[(*Lsrc4++) & 63][(*Rsrc4++) & 63];
