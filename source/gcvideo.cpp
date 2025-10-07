@@ -706,7 +706,7 @@ ResetVideo_Emu ()
 	// reinitialize texture
 	GX_InvalidateTexAll ();
 	GX_InitTexObj (&texobj, texturemem, TEX_WIDTH, TEX_HEIGHT, GX_TF_RGB565, GX_CLAMP, GX_CLAMP, GX_FALSE);	// initialize the texture obj we are going to use
-	if (!(GCSettings.render&1))
+	if (!(GCSettings.render&1) || GCSettings.render == 5)
 		GX_InitTexObjLOD(&texobj,GX_NEAR,GX_NEAR_MIP_NEAR,2.5,9.0,0.0,GX_FALSE,GX_FALSE,GX_ANISO_1); // original/unfiltered video mode: force texture filtering OFF
 	GX_LoadTexObj (&texobj, GX_TEXMAP0);
 	memset(texturemem, 0, TEX_WIDTH * TEX_HEIGHT * 2); // clear texture memory
