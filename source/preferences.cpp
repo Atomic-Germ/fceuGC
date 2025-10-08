@@ -402,8 +402,8 @@ void FixInvalidSettings()
 		GCSettings.language = LANG_ENGLISH;
 	if(GCSettings.Controller > CTRL_PAD4 || GCSettings.Controller < CTRL_ZAPPER)
 		GCSettings.Controller = CTRL_PAD2;
-	if(!(GCSettings.render >= 0 && GCSettings.render < 5))
-		GCSettings.render = 4;
+	if(!(GCSettings.render >= 0 && GCSettings.render <= 5))
+		GCSettings.render = 5; // default to scanlines if invalid
 	if(GCSettings.timing < 0 || GCSettings.timing > 3)
 		GCSettings.timing = 2;
 	if(!(GCSettings.videomode >= 0 && GCSettings.videomode < 5))
@@ -421,7 +421,7 @@ DefaultSettings ()
 	memset (&GCSettings, 0, sizeof (GCSettings));
 	ResetControls(); // controller button mappings
 
-	GCSettings.currpal = 1; // color palette
+	GCSettings.currpal = 2; // PVM Style D93 (FBX)
 	GCSettings.timing = 2; // 0 - NTSC, 1 - PAL, 2 - Automatic
 	GCSettings.videomode = 0; // automatic video mode detection
 	GCSettings.Controller = CTRL_PAD2; // NES pad, Four Score, Zapper
@@ -429,7 +429,7 @@ DefaultSettings ()
 	GCSettings.spritelimit = 1; // enforce 8 sprite limit
 	GCSettings.gamegenie = 0; // Off
 
-	GCSettings.render = 3; // Filtered (sharp)
+	GCSettings.render = 5; // Scanlines
 	GCSettings.hideoverscan = 3; // hide both
 
 	GCSettings.widescreen = 0;
