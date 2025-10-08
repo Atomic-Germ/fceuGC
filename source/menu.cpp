@@ -129,7 +129,8 @@ static const char* renderNames[] = {
 	"Filtered",
 	"Unfiltered",
 	"Filtered (Soft)",
-	"Filtered (Sharp)"
+	"Filtered (Sharp)",
+	"Scanlines"
 };
 
 /****************************************************************************
@@ -3662,7 +3663,7 @@ static int MenuSettingsVideo()
 		{
 			case 0:
 				GCSettings.render++;
-				if (GCSettings.render > 4)
+				if (GCSettings.render > 5)
 					GCSettings.render = 0;
 				break;
 
@@ -3714,7 +3715,7 @@ static int MenuSettingsVideo()
 		{
 			firstRun = false;
 
-			sprintf(options.value[0], "%s", GetLookupString(renderNames, GCSettings.render, 5));
+			sprintf(options.value[0], "%s", GetLookupString(renderNames, GCSettings.render, 6));
 
 			if(GCSettings.widescreen)
 				sprintf (options.value[1], "16:9 Correction");
