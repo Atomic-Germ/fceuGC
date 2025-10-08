@@ -3,9 +3,42 @@ name: FCE Ultra GX Build
 on: [push, pull_request]
 
 jobs:
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: Install build dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential g++
+        
+    - name: Build unit tests
+      run: |
+        cd tests
+        make tests
+        
+    - name: Run unit tests
+      run: |
+        cd tests
+        make run
+        
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: unit-test-results
+        path: tests/
+        
   build:
     name: Build
     runs-on: ubuntu-latest
+    needs: [unit-tests]
     strategy:
       matrix:
         image: ["Wii", "GameCube"]
