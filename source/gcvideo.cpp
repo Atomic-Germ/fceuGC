@@ -45,6 +45,7 @@ static int oldRenderMode = -1; // set to GCSettings.render when changing (tempor
 /*** 3D GX ***/
 #define TEX_WIDTH 256
 #define TEX_HEIGHT 240
+#define TEX_HEIGHT_SCANLINE 480  // 2x height for scanline mode
 #define DEFAULT_FIFO_SIZE ( 256 * 1024 )
 static u8 gp_fifo[DEFAULT_FIFO_SIZE] ATTRIBUTE_ALIGN(32);
 static u32 copynow = GX_FALSE;
@@ -707,11 +708,12 @@ ResetVideo_Emu ()
 
 	// reinitialize texture
 	GX_InvalidateTexAll ();
-	GX_InitTexObj (&texobj, texturemem, TEX_WIDTH, TEX_HEIGHT, GX_TF_RGB565, GX_CLAMP, GX_CLAMP, GX_FALSE);	// initialize the texture obj we are going to use
+	int texHeight = (GCSettings.render == 5) ? TEX_HEIGHT_SCANLINE : TEX_HEIGHT;
+	GX_InitTexObj (&texobj, texturemem, TEX_WIDTH, texHeight, GX_TF_RGB565, GX_CLAMP, GX_CLAMP, GX_FALSE);	// initialize the texture obj we are going to use
 	if (!(GCSettings.render&1) || GCSettings.render == 5)
 		GX_InitTexObjLOD(&texobj,GX_NEAR,GX_NEAR_MIP_NEAR,2.5,9.0,0.0,GX_FALSE,GX_FALSE,GX_ANISO_1); // original/unfiltered video mode: force texture filtering OFF
 	GX_LoadTexObj (&texobj, GX_TEXMAP0);
-	memset(texturemem, 0, TEX_WIDTH * TEX_HEIGHT * 2); // clear texture memory
+	memset(texturemem, 0, TEX_WIDTH * texHeight * 2); // clear texture memory
 }
 
 /****************************************************************************
@@ -754,88 +756,99 @@ void RenderFrame(unsigned char *XBuf)
 	u8 *src4 = XBuf + (borderheight << 8) + borderwidth + 768;
 
 	// fill the texture
-	for (height = 0; height < 240 - (borderheight << 1); height += 4)
-	{
-		for (width = 0; width < 256 - (borderwidth << 1); width += 4)
-		{
-			// Row one
-			if (GCSettings.render == 5 && !(height & 1)) { // scanline mode - darken odd rows
-				u16 p1 = rgb565[*src1++];
-				u16 p2 = rgb565[*src1++];
-				u16 p3 = rgb565[*src1++];
-				u16 p4 = rgb565[*src1++];
-				*texture++ = (((p1 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p1 & 0xF81F) * 6) >> 3) & 0xF81F;
-				*texture++ = (((p2 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p2 & 0xF81F) * 6) >> 3) & 0xF81F;
-				*texture++ = (((p3 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p3 & 0xF81F) * 6) >> 3) & 0xF81F;
-				*texture++ = (((p4 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p4 & 0xF81F) * 6) >> 3) & 0xF81F;
-			} else {
-				*texture++ = rgb565[*src1++];
-				*texture++ = rgb565[*src1++];
-				*texture++ = rgb565[*src1++];
-				*texture++ = rgb565[*src1++];
+	if (GCSettings.render == 5) {
+		// Scanline mode: 2x vertical rendering with 4x4 tile format
+		// RGB565 textures use 4x4 tiles - we must write in that pattern
+		// Process 2 NES rows at a time (becomes 4 texture rows with scanlines)
+		u8 *srcptr = XBuf + (borderheight << 8) + borderwidth;
+		u16 *texptr = texture;
+		int nesHeight = 240 - (borderheight << 1);
+		int nesWidth = 256 - (borderwidth << 1);
+		
+		for (height = 0; height < nesHeight; height += 2) {
+			u8 *src_row1 = srcptr;
+			u8 *src_row2 = srcptr + 256;
+			
+			for (width = 0; width < nesWidth; width += 4) {
+				// 4x4 tile: rows are [NES1_bright, NES1_dark, NES2_bright, NES2_dark]
+				// Row 0 of tile: NES row 1 bright
+				*texptr++ = rgb565[*src_row1++];
+				*texptr++ = rgb565[*src_row1++];
+				*texptr++ = rgb565[*src_row1++];
+				*texptr++ = rgb565[*src_row1++];
+				
+				// Row 1 of tile: NES row 1 dark
+				src_row1 -= 4;
+				u16 p0 = rgb565[*src_row1++];
+				u16 p1 = rgb565[*src_row1++];
+				u16 p2 = rgb565[*src_row1++];
+				u16 p3 = rgb565[*src_row1++];
+				*texptr++ = (((p0 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p0 & 0xF81F) * 6) >> 3) & 0xF81F;
+				*texptr++ = (((p1 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p1 & 0xF81F) * 6) >> 3) & 0xF81F;
+				*texptr++ = (((p2 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p2 & 0xF81F) * 6) >> 3) & 0xF81F;
+				*texptr++ = (((p3 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p3 & 0xF81F) * 6) >> 3) & 0xF81F;
+				
+				// Row 2 of tile: NES row 2 bright
+				*texptr++ = rgb565[*src_row2++];
+				*texptr++ = rgb565[*src_row2++];
+				*texptr++ = rgb565[*src_row2++];
+				*texptr++ = rgb565[*src_row2++];
+				
+				// Row 3 of tile: NES row 2 dark
+				src_row2 -= 4;
+				p0 = rgb565[*src_row2++];
+				p1 = rgb565[*src_row2++];
+				p2 = rgb565[*src_row2++];
+				p3 = rgb565[*src_row2++];
+				*texptr++ = (((p0 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p0 & 0xF81F) * 6) >> 3) & 0xF81F;
+				*texptr++ = (((p1 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p1 & 0xF81F) * 6) >> 3) & 0xF81F;
+				*texptr++ = (((p2 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p2 & 0xF81F) * 6) >> 3) & 0xF81F;
+				*texptr++ = (((p3 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p3 & 0xF81F) * 6) >> 3) & 0xF81F;
 			}
-
-			// Row two
-			if (GCSettings.render == 5 && !((height + 1) & 1)) { // scanline mode - darken odd rows
-				u16 p1 = rgb565[*src2++];
-				u16 p2 = rgb565[*src2++];
-				u16 p3 = rgb565[*src2++];
-				u16 p4 = rgb565[*src2++];
-				*texture++ = (((p1 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p1 & 0xF81F) * 6) >> 3) & 0xF81F;
-				*texture++ = (((p2 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p2 & 0xF81F) * 6) >> 3) & 0xF81F;
-				*texture++ = (((p3 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p3 & 0xF81F) * 6) >> 3) & 0xF81F;
-				*texture++ = (((p4 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p4 & 0xF81F) * 6) >> 3) & 0xF81F;
-			} else {
-				*texture++ = rgb565[*src2++];
-				*texture++ = rgb565[*src2++];
-				*texture++ = rgb565[*src2++];
-				*texture++ = rgb565[*src2++];
-			}
-
-			// Row three
-			if (GCSettings.render == 5 && !((height + 2) & 1)) { // scanline mode - darken odd rows
-				u16 p1 = rgb565[*src3++];
-				u16 p2 = rgb565[*src3++];
-				u16 p3 = rgb565[*src3++];
-				u16 p4 = rgb565[*src3++];
-				*texture++ = (((p1 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p1 & 0xF81F) * 6) >> 3) & 0xF81F;
-				*texture++ = (((p2 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p2 & 0xF81F) * 6) >> 3) & 0xF81F;
-				*texture++ = (((p3 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p3 & 0xF81F) * 6) >> 3) & 0xF81F;
-				*texture++ = (((p4 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p4 & 0xF81F) * 6) >> 3) & 0xF81F;
-			} else {
-				*texture++ = rgb565[*src3++];
-				*texture++ = rgb565[*src3++];
-				*texture++ = rgb565[*src3++];
-				*texture++ = rgb565[*src3++];
-			}
-
-			// Row four
-			if (GCSettings.render == 5 && !((height + 3) & 1)) { // scanline mode - darken odd rows
-				u16 p1 = rgb565[*src4++];
-				u16 p2 = rgb565[*src4++];
-				u16 p3 = rgb565[*src4++];
-				u16 p4 = rgb565[*src4++];
-				*texture++ = (((p1 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p1 & 0xF81F) * 6) >> 3) & 0xF81F;
-				*texture++ = (((p2 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p2 & 0xF81F) * 6) >> 3) & 0xF81F;
-				*texture++ = (((p3 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p3 & 0xF81F) * 6) >> 3) & 0xF81F;
-				*texture++ = (((p4 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p4 & 0xF81F) * 6) >> 3) & 0xF81F;
-			} else {
-				*texture++ = rgb565[*src4++];
-				*texture++ = rgb565[*src4++];
-				*texture++ = rgb565[*src4++];
-				*texture++ = rgb565[*src4++];
-			}
+			srcptr += 512; // Move to next pair of NES rows
 		}
-		src1 += 768 + (borderwidth << 1); // line 4*N
-		src2 += 768 + (borderwidth << 1); // line 4*(N+1)
-		src3 += 768 + (borderwidth << 1); // line 4*(N+2)
-		src4 += 768 + (borderwidth << 1); // line 4*(N+3)
+	} else {
+		// Normal rendering (all other modes)
+		for (height = 0; height < 240 - (borderheight << 1); height += 4)
+		{
+			for (width = 0; width < 256 - (borderwidth << 1); width += 4)
+			{
+				// Row one
+				*texture++ = rgb565[*src1++];
+				*texture++ = rgb565[*src1++];
+				*texture++ = rgb565[*src1++];
+				*texture++ = rgb565[*src1++];
 
-		texture += (borderwidth << 3);
+				// Row two
+				*texture++ = rgb565[*src2++];
+				*texture++ = rgb565[*src2++];
+				*texture++ = rgb565[*src2++];
+				*texture++ = rgb565[*src2++];
+
+				// Row three
+				*texture++ = rgb565[*src3++];
+				*texture++ = rgb565[*src3++];
+				*texture++ = rgb565[*src3++];
+				*texture++ = rgb565[*src3++];
+
+				// Row four
+				*texture++ = rgb565[*src4++];
+				*texture++ = rgb565[*src4++];
+				*texture++ = rgb565[*src4++];
+				*texture++ = rgb565[*src4++];
+			}
+			src1 += 768 + (borderwidth << 1); // line 4*N
+			src2 += 768 + (borderwidth << 1); // line 4*(N+1)
+			src3 += 768 + (borderwidth << 1); // line 4*(N+2)
+			src4 += 768 + (borderwidth << 1); // line 4*(N+3)
+
+			texture += (borderwidth << 3);
+		}
 	}
 
 	// load texture into GX
-	DCFlushRange(texturemem, TEX_WIDTH * TEX_HEIGHT * 4);
+	int texHeight = (GCSettings.render == 5) ? TEX_HEIGHT_SCANLINE : TEX_HEIGHT;
+	DCFlushRange(texturemem, TEX_WIDTH * texHeight * 2);
 
 	// clear texture objects
 	GX_InvalidateTexAll();
@@ -923,89 +936,101 @@ void RenderStereoFrames(unsigned char *XBufLeft, unsigned char *XBufRight)
 	u8 *Rsrc4 = XBufRight + (borderheight << 8) + borderwidth + 768;
 
 	// fill the texture with red/cyan anaglyph
-	for (height = 0; height < 240 - (borderheight << 1); height += 4)
-	{
-		for (width = 0; width < 256 - (borderwidth << 1); width += 4)
-		{
-			// Row one
-			if (GCSettings.render == 5 && !(height & 1)) { // scanline mode - darken odd rows
-				u16 p1 = anaglyph565[(*Lsrc1++) & 63][(*Rsrc1++) & 63];
-				u16 p2 = anaglyph565[(*Lsrc1++) & 63][(*Rsrc1++) & 63];
-				u16 p3 = anaglyph565[(*Lsrc1++) & 63][(*Rsrc1++) & 63];
-				u16 p4 = anaglyph565[(*Lsrc1++) & 63][(*Rsrc1++) & 63];
-				*texture++ = (((p1 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p1 & 0xF81F) * 6) >> 3) & 0xF81F;
-				*texture++ = (((p2 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p2 & 0xF81F) * 6) >> 3) & 0xF81F;
-				*texture++ = (((p3 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p3 & 0xF81F) * 6) >> 3) & 0xF81F;
-				*texture++ = (((p4 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p4 & 0xF81F) * 6) >> 3) & 0xF81F;
-			} else {
-				*texture++ = anaglyph565[(*Lsrc1++) & 63][(*Rsrc1++) & 63];
-				*texture++ = anaglyph565[(*Lsrc1++) & 63][(*Rsrc1++) & 63];
-				*texture++ = anaglyph565[(*Lsrc1++) & 63][(*Rsrc1++) & 63];
-				*texture++ = anaglyph565[(*Lsrc1++) & 63][(*Rsrc1++) & 63];
+	if (GCSettings.render == 5) {
+		// Scanline mode: 2x vertical rendering for stereo with 4x4 tiling
+		u8 *Lsrcptr = XBufLeft + (borderheight << 8) + borderwidth;
+		u8 *Rsrcptr = XBufRight + (borderheight << 8) + borderwidth;
+		u16 *texptr = texture;
+		int nesHeight = 240 - (borderheight << 1);
+		int nesWidth = 256 - (borderwidth << 1);
+		
+		for (height = 0; height < nesHeight; height += 2) {
+			u8 *Lsrc_row1 = Lsrcptr;
+			u8 *Rsrc_row1 = Rsrcptr;
+			u8 *Lsrc_row2 = Lsrcptr + 256;
+			u8 *Rsrc_row2 = Rsrcptr + 256;
+			
+			for (width = 0; width < nesWidth; width += 4) {
+				// Row 0: NES row 1 bright
+				*texptr++ = anaglyph565[(*Lsrc_row1++) & 63][(*Rsrc_row1++) & 63];
+				*texptr++ = anaglyph565[(*Lsrc_row1++) & 63][(*Rsrc_row1++) & 63];
+				*texptr++ = anaglyph565[(*Lsrc_row1++) & 63][(*Rsrc_row1++) & 63];
+				*texptr++ = anaglyph565[(*Lsrc_row1++) & 63][(*Rsrc_row1++) & 63];
+				
+				// Row 1: NES row 1 dark
+				Lsrc_row1 -= 4; Rsrc_row1 -= 4;
+				u16 p0 = anaglyph565[(*Lsrc_row1++) & 63][(*Rsrc_row1++) & 63];
+				u16 p1 = anaglyph565[(*Lsrc_row1++) & 63][(*Rsrc_row1++) & 63];
+				u16 p2 = anaglyph565[(*Lsrc_row1++) & 63][(*Rsrc_row1++) & 63];
+				u16 p3 = anaglyph565[(*Lsrc_row1++) & 63][(*Rsrc_row1++) & 63];
+				*texptr++ = (((p0 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p0 & 0xF81F) * 6) >> 3) & 0xF81F;
+				*texptr++ = (((p1 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p1 & 0xF81F) * 6) >> 3) & 0xF81F;
+				*texptr++ = (((p2 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p2 & 0xF81F) * 6) >> 3) & 0xF81F;
+				*texptr++ = (((p3 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p3 & 0xF81F) * 6) >> 3) & 0xF81F;
+				
+				// Row 2: NES row 2 bright
+				*texptr++ = anaglyph565[(*Lsrc_row2++) & 63][(*Rsrc_row2++) & 63];
+				*texptr++ = anaglyph565[(*Lsrc_row2++) & 63][(*Rsrc_row2++) & 63];
+				*texptr++ = anaglyph565[(*Lsrc_row2++) & 63][(*Rsrc_row2++) & 63];
+				*texptr++ = anaglyph565[(*Lsrc_row2++) & 63][(*Rsrc_row2++) & 63];
+				
+				// Row 3: NES row 2 dark
+				Lsrc_row2 -= 4; Rsrc_row2 -= 4;
+				p0 = anaglyph565[(*Lsrc_row2++) & 63][(*Rsrc_row2++) & 63];
+				p1 = anaglyph565[(*Lsrc_row2++) & 63][(*Rsrc_row2++) & 63];
+				p2 = anaglyph565[(*Lsrc_row2++) & 63][(*Rsrc_row2++) & 63];
+				p3 = anaglyph565[(*Lsrc_row2++) & 63][(*Rsrc_row2++) & 63];
+				*texptr++ = (((p0 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p0 & 0xF81F) * 6) >> 3) & 0xF81F;
+				*texptr++ = (((p1 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p1 & 0xF81F) * 6) >> 3) & 0xF81F;
+				*texptr++ = (((p2 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p2 & 0xF81F) * 6) >> 3) & 0xF81F;
+				*texptr++ = (((p3 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p3 & 0xF81F) * 6) >> 3) & 0xF81F;
 			}
-			// Row two
-			if (GCSettings.render == 5 && !((height + 1) & 1)) { // scanline mode - darken odd rows
-				u16 p1 = anaglyph565[(*Lsrc2++) & 63][(*Rsrc2++) & 63];
-				u16 p2 = anaglyph565[(*Lsrc2++) & 63][(*Rsrc2++) & 63];
-				u16 p3 = anaglyph565[(*Lsrc2++) & 63][(*Rsrc2++) & 63];
-				u16 p4 = anaglyph565[(*Lsrc2++) & 63][(*Rsrc2++) & 63];
-				*texture++ = (((p1 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p1 & 0xF81F) * 6) >> 3) & 0xF81F;
-				*texture++ = (((p2 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p2 & 0xF81F) * 6) >> 3) & 0xF81F;
-				*texture++ = (((p3 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p3 & 0xF81F) * 6) >> 3) & 0xF81F;
-				*texture++ = (((p4 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p4 & 0xF81F) * 6) >> 3) & 0xF81F;
-			} else {
-				*texture++ = anaglyph565[(*Lsrc2++) & 63][(*Rsrc2++) & 63];
-				*texture++ = anaglyph565[(*Lsrc2++) & 63][(*Rsrc2++) & 63];
-				*texture++ = anaglyph565[(*Lsrc2++) & 63][(*Rsrc2++) & 63];
-				*texture++ = anaglyph565[(*Lsrc2++) & 63][(*Rsrc2++) & 63];
-			}
-			// Row three
-			if (GCSettings.render == 5 && !((height + 2) & 1)) { // scanline mode - darken odd rows
-				u16 p1 = anaglyph565[(*Lsrc3++) & 63][(*Rsrc3++) & 63];
-				u16 p2 = anaglyph565[(*Lsrc3++) & 63][(*Rsrc3++) & 63];
-				u16 p3 = anaglyph565[(*Lsrc3++) & 63][(*Rsrc3++) & 63];
-				u16 p4 = anaglyph565[(*Lsrc3++) & 63][(*Rsrc3++) & 63];
-				*texture++ = (((p1 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p1 & 0xF81F) * 6) >> 3) & 0xF81F;
-				*texture++ = (((p2 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p2 & 0xF81F) * 6) >> 3) & 0xF81F;
-				*texture++ = (((p3 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p3 & 0xF81F) * 6) >> 3) & 0xF81F;
-				*texture++ = (((p4 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p4 & 0xF81F) * 6) >> 3) & 0xF81F;
-			} else {
-				*texture++ = anaglyph565[(*Lsrc3++) & 63][(*Rsrc3++) & 63];
-				*texture++ = anaglyph565[(*Lsrc3++) & 63][(*Rsrc3++) & 63];
-				*texture++ = anaglyph565[(*Lsrc3++) & 63][(*Rsrc3++) & 63];
-				*texture++ = anaglyph565[(*Lsrc3++) & 63][(*Rsrc3++) & 63];
-			}
-			// Row four
-			if (GCSettings.render == 5 && !((height + 3) & 1)) { // scanline mode - darken odd rows
-				u16 p1 = anaglyph565[(*Lsrc4++) & 63][(*Rsrc4++) & 63];
-				u16 p2 = anaglyph565[(*Lsrc4++) & 63][(*Rsrc4++) & 63];
-				u16 p3 = anaglyph565[(*Lsrc4++) & 63][(*Rsrc4++) & 63];
-				u16 p4 = anaglyph565[(*Lsrc4++) & 63][(*Rsrc4++) & 63];
-				*texture++ = (((p1 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p1 & 0xF81F) * 6) >> 3) & 0xF81F;
-				*texture++ = (((p2 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p2 & 0xF81F) * 6) >> 3) & 0xF81F;
-				*texture++ = (((p3 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p3 & 0xF81F) * 6) >> 3) & 0xF81F;
-				*texture++ = (((p4 & 0x07E0) * 6) >> 3) & 0x07E0 | (((p4 & 0xF81F) * 6) >> 3) & 0xF81F;
-			} else {
-				*texture++ = anaglyph565[(*Lsrc4++) & 63][(*Rsrc4++) & 63];
-				*texture++ = anaglyph565[(*Lsrc4++) & 63][(*Rsrc4++) & 63];
-				*texture++ = anaglyph565[(*Lsrc4++) & 63][(*Rsrc4++) & 63];
-				*texture++ = anaglyph565[(*Lsrc4++) & 63][(*Rsrc4++) & 63];
-			}
+			Lsrcptr += 512;
+			Rsrcptr += 512;
 		}
-		Lsrc1 += 768 + (borderwidth << 1); // line 4*N
-		Lsrc2 += 768 + (borderwidth << 1); // line 4*(N+1)
-		Lsrc3 += 768 + (borderwidth << 1); // line 4*(N+2)
-		Lsrc4 += 768 + (borderwidth << 1); // line 4*(N+3)
-		Rsrc1 += 768 + (borderwidth << 1); // line 4*N
-		Rsrc2 += 768 + (borderwidth << 1); // line 4*(N+1)
-		Rsrc3 += 768 + (borderwidth << 1); // line 4*(N+2)
-		Rsrc4 += 768 + (borderwidth << 1); // line 4*(N+3)
+	} else {
+		// Normal stereo rendering
+		for (height = 0; height < 240 - (borderheight << 1); height += 4)
+		{
+			for (width = 0; width < 256 - (borderwidth << 1); width += 4)
+			{
+				// Row one
+				*texture++ = anaglyph565[(*Lsrc1++) & 63][(*Rsrc1++) & 63];
+				*texture++ = anaglyph565[(*Lsrc1++) & 63][(*Rsrc1++) & 63];
+				*texture++ = anaglyph565[(*Lsrc1++) & 63][(*Rsrc1++) & 63];
+				*texture++ = anaglyph565[(*Lsrc1++) & 63][(*Rsrc1++) & 63];
+				// Row two
+				*texture++ = anaglyph565[(*Lsrc2++) & 63][(*Rsrc2++) & 63];
+				*texture++ = anaglyph565[(*Lsrc2++) & 63][(*Rsrc2++) & 63];
+				*texture++ = anaglyph565[(*Lsrc2++) & 63][(*Rsrc2++) & 63];
+				*texture++ = anaglyph565[(*Lsrc2++) & 63][(*Rsrc2++) & 63];
+				// Row three
+				*texture++ = anaglyph565[(*Lsrc3++) & 63][(*Rsrc3++) & 63];
+				*texture++ = anaglyph565[(*Lsrc3++) & 63][(*Rsrc3++) & 63];
+				*texture++ = anaglyph565[(*Lsrc3++) & 63][(*Rsrc3++) & 63];
+				*texture++ = anaglyph565[(*Lsrc3++) & 63][(*Rsrc3++) & 63];
+				// Row four
+				*texture++ = anaglyph565[(*Lsrc4++) & 63][(*Rsrc4++) & 63];
+				*texture++ = anaglyph565[(*Lsrc4++) & 63][(*Rsrc4++) & 63];
+				*texture++ = anaglyph565[(*Lsrc4++) & 63][(*Rsrc4++) & 63];
+				*texture++ = anaglyph565[(*Lsrc4++) & 63][(*Rsrc4++) & 63];
+			}
+			Lsrc1 += 768 + (borderwidth << 1); // line 4*N
+			Lsrc2 += 768 + (borderwidth << 1); // line 4*(N+1)
+			Lsrc3 += 768 + (borderwidth << 1); // line 4*(N+2)
+			Lsrc4 += 768 + (borderwidth << 1); // line 4*(N+3)
+			Rsrc1 += 768 + (borderwidth << 1); // line 4*N
+			Rsrc2 += 768 + (borderwidth << 1); // line 4*(N+1)
+			Rsrc3 += 768 + (borderwidth << 1); // line 4*(N+2)
+			Rsrc4 += 768 + (borderwidth << 1); // line 4*(N+3)
 
-		texture += (borderwidth << 3);
+			texture += (borderwidth << 3);
+		}
 	}
 
 	// load texture into GX
-	DCFlushRange(texturemem, TEX_WIDTH * TEX_HEIGHT * 4);
+	int texHeight = (GCSettings.render == 5) ? TEX_HEIGHT_SCANLINE : TEX_HEIGHT;
+	DCFlushRange(texturemem, TEX_WIDTH * texHeight * 2);
 
 	// clear texture objects
 	GX_InvalidateTexAll();
